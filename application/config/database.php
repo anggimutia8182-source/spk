@@ -73,9 +73,23 @@ defined('BASEPATH') OR exit('No direct script access allowed');
 $active_group = 'default';
 $query_builder = TRUE;
 
-// Deteksi otomatis password root MySQL di Laragon ('anggi20' atau default Laragon '')
+// Deteksi environment variable (misal dari Railway, Docker, atau Cloud Server)
+$env_host = getenv('MYSQLHOST') ?: getenv('MYSQL_HOST');
+$env_port = getenv('MYSQLPORT') ?: getenv('MYSQL_PORT');
+$env_user = getenv('MYSQLUSER') ?: getenv('MYSQL_USER');
+$env_pass = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD');
+$env_db   = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE');
+
+// Default fallback untuk lingkungan lokal Laragon
+$db_host = $env_host ?: 'localhost';
+$db_port = $env_port ? (int)$env_port : 3306;
+$db_user = $env_user ?: 'root';
+$db_name = $env_db   ?: 'spk_gangguan_tidur';
+
 $db_pass = 'anggi20';
-if (function_exists('mysqli_connect')) {
+if ($env_pass !== false && $env_pass !== null) {
+	$db_pass = $env_pass;
+} elseif (function_exists('mysqli_connect')) {
 	$check = @mysqli_connect('127.0.0.1', 'root', 'anggi20');
 	if (!$check) {
 		$check_empty = @mysqli_connect('127.0.0.1', 'root', '');
@@ -90,10 +104,11 @@ if (function_exists('mysqli_connect')) {
 
 $db['default'] = array(
 	'dsn'	=> '',
-	'hostname' => 'localhost',
-	'username' => 'root',
+	'hostname' => $db_host,
+	'port'     => (int)$db_port,
+	'username' => $db_user,
 	'password' => $db_pass,
-	'database' => 'spk_gangguan_tidur',
+	'database' => $db_name,
 	'dbdriver' => 'mysqli',
 	'dbprefix' => '',
 	'pconnect' => FALSE,
