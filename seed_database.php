@@ -1,29 +1,51 @@
 <?php
-header('Content-Type: text/plain; charset=utf-8');
+if (php_sapi_name() !== 'cli') {
+    header('Content-Type: text/plain; charset=utf-8');
+}
 
-// Try connecting with empty password (Laragon default) or 'anggi20'
-$passwords = ['', 'anggi20'];
+// Deteksi environment variable atau fallback ke lokal Laragon
+$db_host = getenv('MYSQLHOST') ?: getenv('MYSQL_HOST') ?: '127.0.0.1';
+$db_port = (int)(getenv('MYSQLPORT') ?: getenv('MYSQL_PORT') ?: 3306);
+$db_user = getenv('MYSQLUSER') ?: getenv('MYSQL_USER') ?: 'root';
+$db_pass_env = getenv('MYSQLPASSWORD') ?: getenv('MYSQL_PASSWORD');
+$db_name = getenv('MYSQLDATABASE') ?: getenv('MYSQL_DATABASE') ?: 'spk_gangguan_tidur';
+
 $m = null;
-$connectedPass = null;
 
-foreach ($passwords as $p) {
-    $conn = @new mysqli('127.0.0.1', 'root', $p);
-    if (!$conn->connect_error) {
-        $m = $conn;
-        $connectedPass = $p;
-        break;
+// Retry loop jika database masih dalam proses booting
+$max_retries = 10;
+$retry = 0;
+
+while ($retry < $max_retries) {
+    if ($db_pass_env !== false && $db_pass_env !== null) {
+        $conn = @new mysqli($db_host, $db_user, $db_pass_env, '', $db_port);
+        if (!$conn->connect_error) {
+            $m = $conn;
+            break;
+        }
+    } else {
+        foreach (['anggi20', ''] as $p) {
+            $conn = @new mysqli($db_host, $db_user, $p, '', $db_port);
+            if (!$conn->connect_error) {
+                $m = $conn;
+                break 2;
+            }
+        }
     }
+    $retry++;
+    sleep(2);
 }
 
 if (!$m) {
-    die("Koneksi MySQL gagal: Pastikan MySQL di Laragon sudah dinyalakan.\n");
+    echo "Koneksi MySQL belum berhasil ($db_host:$db_port), melanjutkan...\n";
+    return;
 }
 
-echo "Berhasil terkoneksi ke MySQL (root)!\n";
+echo "Berhasil terkoneksi ke MySQL ($db_host:$db_port)!\n";
 
 // Ensure database exists
-$m->query("CREATE DATABASE IF NOT EXISTS `spk_gangguan_tidur` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
-$m->select_db('spk_gangguan_tidur');
+$m->query("CREATE DATABASE IF NOT EXISTS `$db_name` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci");
+$m->select_db($db_name);
 
 // Create tables if not exist
 $m->query("CREATE TABLE IF NOT EXISTS `tbl_user` (
@@ -90,6 +112,19 @@ if ($colCheck->num_rows == 0) {
         ADD COLUMN usia INT NULL AFTER nama_pasien,
         ADD COLUMN jenis_kelamin VARCHAR(20) NULL AFTER usia,
         ADD COLUMN keluhan TEXT NULL AFTER jenis_kelamin");
+}
+
+// Cek apakah tabel user sudah memiliki data (jika sudah, jangan timpa data)
+$check_user = $m->query("SELECT COUNT(*) as total FROM tbl_user");
+$user_count = 0;
+if ($check_user) {
+    $row = $check_user->fetch_assoc();
+    $user_count = (int)$row['total'];
+}
+
+if ($user_count > 0) {
+    echo "Database sudah terisi ($user_count user ditemukan), melewati proses seeding.\n";
+    return;
 }
 
 // Disable foreign key checks for clean seeding

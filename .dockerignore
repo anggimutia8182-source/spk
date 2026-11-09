@@ -4,5 +4,4 @@
 .editorconfig
 *.xlsx
 *.sql
-seed_database.php
 tests/
