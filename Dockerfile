@@ -3,8 +3,10 @@ FROM php:8.1-apache
 # Install MySQL extensions needed by CodeIgniter 3
 RUN docker-php-ext-install mysqli pdo pdo_mysql
 
-# Enable Apache mod_rewrite for friendly URLs
-RUN a2enmod rewrite
+# Enable Apache mod_rewrite and ensure only mpm_prefork is active
+RUN a2enmod rewrite \
+    && a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork
 
 # Allow .htaccess rewrites
 RUN { \
@@ -25,5 +27,5 @@ COPY . /var/www/html/
 # Permissions
 RUN chown -R www-data:www-data /var/www/html
 
-# Dynamic port binding for Railway ($PORT) and auto-seed database on start
-CMD ["sh", "-c", "sed -i \"s/Listen 80/Listen ${PORT:-80}/g\" /etc/apache2/ports.conf && sed -i \"s/<VirtualHost \\*:80>/<VirtualHost *:${PORT:-80}>/g\" /etc/apache2/sites-available/000-default.conf && php -f /var/www/html/seed_database.php && exec apache2-foreground"]
+# Dynamic port binding for Railway ($PORT), ensure prefork MPM, and auto-seed database on start
+CMD ["sh", "-c", "a2dismod mpm_event mpm_worker 2>/dev/null || true && a2enmod mpm_prefork && sed -i \"s/Listen 80/Listen ${PORT:-80}/g\" /etc/apache2/ports.conf && sed -i \"s/<VirtualHost \\*:80>/<VirtualHost *:${PORT:-80}>/g\" /etc/apache2/sites-available/000-default.conf && php -f /var/www/html/seed_database.php && exec apache2-foreground"]
